@@ -1,1 +1,3 @@
-from .course import Course, Module
+from app.models.course import Course, Module
+
+__all__ = ["Course", "Module"]
