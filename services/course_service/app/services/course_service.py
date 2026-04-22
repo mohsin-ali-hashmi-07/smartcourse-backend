@@ -14,7 +14,7 @@ async def create_course(db: AsyncSession, data: CourseCreate) -> Course:
         instructor_id=data.instructor_id,
         status="draft",
     )
-    return await course_repository.create_course(db, course.__dict__ | {})
+    return await course_repository.create_course(db, course)
 
 
 async def get_course(db: AsyncSession, course_id: str) -> Course:
@@ -70,7 +70,7 @@ async def create_module(
         description=data.description,
         order_index=data.order_index,
     )
-    return await course_repository.create_module(db, module.__dict__ | {})
+    return await course_repository.create_module(db, module)
 
 async def get_module(db: AsyncSession, module_id: str) -> Module:
     module = await course_repository.get_module_by_id(db, module_id)

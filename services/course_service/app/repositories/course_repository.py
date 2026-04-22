@@ -29,11 +29,10 @@ async def get_courses_by_instructor(
     )
     return list(result.scalars().all())
 
-async def create_course(db: AsyncSession, data: dict) -> Course:
-    course = Course(**data)
+async def create_course(db: AsyncSession, course: Course) -> Course:
     db.add(course)
     await db.flush()
-    await db.refresh(course)
+    await db.refresh(course, ["modules"])
     return course
 
 
@@ -66,8 +65,7 @@ async def get_modules_by_course(
     )
     return list(result.scalars().all())
 
-async def create_module(db: AsyncSession, data: dict) -> Module:
-    module = Module(**data)
+async def create_module(db: AsyncSession, module: Module) -> Module:
     db.add(module)
     await db.flush()
     await db.refresh(module)
