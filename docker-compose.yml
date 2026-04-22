@@ -14,7 +14,7 @@ services:
   # ─────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
-    container_name: smartcourse-postgres
+    container_name: postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -38,7 +38,7 @@ services:
   # ─────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: smartcourse-redis
+    container_name: redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -57,7 +57,7 @@ services:
   # ─────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.7.0
-    container_name: smartcourse-kafka
+    container_name: kafka
     restart: unless-stopped
     ports:
       - "9092:9092"
@@ -94,7 +94,7 @@ services:
   # ─────────────────────────────────────────
   temporal:
     image: temporalio/auto-setup:1.22.0
-    container_name: smartcourse-temporal
+    container_name: workflow-orchestrator
     restart: unless-stopped
     depends_on:
       postgres:
@@ -115,7 +115,7 @@ services:
   # ─────────────────────────────────────────
   temporal-ui:
     image: temporalio/ui:2.21.3
-    container_name: smartcourse-temporal-ui
+    container_name: temporal-ui
     restart: unless-stopped
     depends_on:
       - temporal
