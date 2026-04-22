@@ -1,5 +1,5 @@
 import uuid
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -7,13 +7,13 @@ from app.schemas.user import UserCreate
 from app.repositories import user_repository
 from app.constants.roles import USER_ROLES
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain_password: str) -> str:
-    return pwd_context.hash(plain_password)
+    return bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt()).decode()
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password,hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 async def register_user(db: AsyncSession, data: UserCreate) -> User:
     existing = await user_repository.get_user_by_email(db, data.email)

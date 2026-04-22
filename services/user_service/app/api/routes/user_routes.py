@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import det_db
+from app.api.dependencies import get_db
 from app.schemas.user import UserCreate, UserResponse, UserRoleUpdate
 from app.services import user_service
 
-router = APIRouter(prefix="/users", tag=["users"])
+router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("/", response_model= UserResponse, status_code= status.HTTP_201_CREATED)
 async def register_user(
@@ -39,7 +39,7 @@ async def assign_role(
 ):
     try:
         user = await user_service.assign_role(db, user_id, data.role)
-        return UserResponse,model_validate(user)
+        return UserResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
