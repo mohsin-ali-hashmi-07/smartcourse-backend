@@ -155,6 +155,37 @@ async def update_course_cached(redis, db, course_id: str, data: dict):
 4. Stream LLM response via `StreamingResponse` using SSE
 5. Include `citations: [{chunk_id, lesson_id, relevance_score}]` in the streamed final message
 
+## MinIO Object Storage (course_service only)
+```python
+# settings.py — add these fields
+minio_endpoint: str
+minio_access_key: str
+minio_secret_key: str
+minio_bucket_name: str
+
+# Async upload using aiobotocore
+import aiobotocore.session
+
+async def upload_asset(file_bytes: bytes, filename: str, content_type: str) -> str:
+    session = aiobotocore.session.get_session()
+    async with session.create_client(
+        "s3",
+        endpoint_url=settings.minio_endpoint,
+        aws_access_key_id=settings.minio_access_key,
+        aws_secret_access_key=settings.minio_secret_key,
+    ) as client:
+        await client.put_object(
+            Bucket=settings.minio_bucket_name,
+            Key=filename,
+            Body=file_bytes,
+            ContentType=content_type,
+        )
+    return f"{settings.minio_endpoint}/{settings.minio_bucket_name}/{filename}"
+```
+- Store returned URL in `courses.asset_url` or `modules.asset_url` column
+- Never expose MinIO credentials in responses
+- GenAI service reads content via course_service HTTP API — not directly from MinIO
+
 ## Domain Events Reference
 | Event Topic          | Producer           | Consumers                        |
 |----------------------|--------------------|----------------------------------|

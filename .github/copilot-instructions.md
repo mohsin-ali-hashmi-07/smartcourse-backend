@@ -92,6 +92,16 @@ For every resource, create schemas in order:
 - Enrollment/progress: **cache-aside**; invalidate on update
 - Never cache authentication tokens server-side
 
+## MinIO Object Storage
+- Used for course assets: PDFs and images uploaded by instructors
+- Owned exclusively by `course_service` — no other service accesses MinIO directly
+- S3-compatible API — use `aiobotocore` for async access (same API as AWS S3)
+- Bucket: `course-assets`
+- After upload, store the object URL/key in the `courses` or `modules` DB record
+- Required env vars: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET_NAME`
+- Docker: `minio/minio` image on port `9000` (API) and `9001` (console UI)
+- GenAI service accesses course content via `course_service` HTTP API — never directly from MinIO
+
 ## Observability
 - Every service `main.py` must wire OpenTelemetry middleware (tracing to Jaeger)
 - Every service must expose `/metrics` for Prometheus scraping
