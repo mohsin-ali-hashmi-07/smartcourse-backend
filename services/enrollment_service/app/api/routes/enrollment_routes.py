@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, get_current_user, require_student
 from app.schemas.enrollment import (
     EnrollmentCreate, EnrollmentResponse, ProgressResponse
 )
+from shared.utils.auth import TokenData
 from app.services import enrollment_service
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 async def enroll_student(
     data: EnrollmentCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_student),
 ):
     try:
         enrollment = await enrollment_service.enroll_student(db, data)
@@ -53,6 +55,7 @@ async def list_by_course(
 async def drop_enrollment(
     enrollment_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
 ):
     try:
         enrollment = await enrollment_service.drop_enrollment(db, enrollment_id)
@@ -67,6 +70,7 @@ async def drop_enrollment(
 async def complete_module(
     enrollment_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_student),
 ):
     try:
         progress = await enrollment_service.complete_module(db, enrollment_id)

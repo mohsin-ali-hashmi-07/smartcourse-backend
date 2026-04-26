@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, get_current_user, require_instructor
 from app.schemas.course import (
     CourseCreate, CourseUpdate, CourseResponse,
     ModuleCreate, ModuleUpdate, ModuleResponse,
 )
-from app.api.dependencies import get_db, get_current_user
 from shared.utils.auth import TokenData
 from app.services import course_service
 
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 async def create_course(
     data: CourseCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_instructor),
 ):
     try:
         course = await course_service.create_course(db, data)
@@ -52,6 +51,7 @@ async def update_course(
     course_id: str,
     data: CourseUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
 ):
     try:
         course = await course_service.update_course(db, course_id, data)
@@ -61,7 +61,11 @@ async def update_course(
 
 
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_course(course_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_course(
+    course_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
+):
     try:
         await course_service.delete_course(db, course_id)
     except ValueError as e:
@@ -76,6 +80,7 @@ async def create_module(
     course_id: str,
     data: ModuleCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
 ):
     try:
         module = await course_service.create_module(db, course_id, data)
@@ -110,6 +115,7 @@ async def update_module(
     module_id: str,
     data: ModuleUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
 ):
     try:
         module = await course_service.update_module(db, module_id, data)
@@ -125,6 +131,7 @@ async def delete_module(
     course_id: str,
     module_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
 ):
     try:
         await course_service.delete_module(db, module_id)
