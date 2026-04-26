@@ -8,7 +8,7 @@ async def connect_redis() -> None:
     redis_client = aioredis.from_url(
         settings.redis_url,
         encoding="utf-8",
-        decode_response=True,
+        decode_responses=True,
     )
 
 async def disconnect_redis() -> None:
