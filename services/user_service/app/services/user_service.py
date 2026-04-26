@@ -1,11 +1,15 @@
 import uuid
 import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone, timedelta
+import jwt
 
 from app.models.user import User
 from app.schemas.user import UserCreate
 from app.repositories import user_repository
 from app.constants.roles import USER_ROLES
+from app.core.settings import settings
+
 
 
 def hash_password(plain_password: str) -> str:
@@ -56,3 +60,27 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> User:
         raise ValueError(f"user not found: {user_id}")
 
     return await user_repository.deactivate_user(db, user)
+
+
+def _create_access_token(user_id: str, role: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    payload = {
+        "sub": user_id,
+        "role": role,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+async def login(db: AsyncSession, email: str, password: str) -> dict:
+    user = await user_repository.get_user_by_email(db, email)
+    if not user or not verify_password(password, user.hashed_password):
+        raise ValueError("invalid email or password")
+    if not user.is_active:
+        raise ValueError("account is deactivated")
+    token = _create_access_token(user.id, user.role)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "role": user.role,
+    }

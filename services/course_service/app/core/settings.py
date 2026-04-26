@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "course-service"
     database_url: str
     debug: bool = True
+    jwt_secret: str
 
     model_config = SettingsConfigDict(
         env_file=".env",

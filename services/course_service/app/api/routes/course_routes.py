@@ -6,6 +6,8 @@ from app.schemas.course import (
     CourseCreate, CourseUpdate, CourseResponse,
     ModuleCreate, ModuleUpdate, ModuleResponse,
 )
+from app.api.dependencies import get_db, get_current_user
+from shared.utils.auth import TokenData
 from app.services import course_service
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -14,6 +16,7 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 async def create_course(
     data: CourseCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
 ):
     try:
         course = await course_service.create_course(db, data)

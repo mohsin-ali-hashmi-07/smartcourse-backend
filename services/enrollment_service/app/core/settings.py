@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     database_url: str
     debug: bool = True
     course_service_url: str
+    jwt_secret: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
