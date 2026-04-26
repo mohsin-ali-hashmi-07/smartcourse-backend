@@ -7,6 +7,7 @@ from app.schemas.course import CourseCreate, CourseUpdate, ModuleCreate, ModuleU
 from app.repositories import course_repository
 from app.constants.course_status import COURSE_STATUS
 from app.core.redis_client import get_redis
+from app.core.kafka_producer import get_producer
 
 CACHE_TTL = 300
 
@@ -90,6 +91,18 @@ async def update_course(
 
     course = await course_repository.update_course(db, course, updates)
     await _set_course_cache(course)
+    if updates.get("status") == "published":
+        producer = get_producer()
+        if producer:
+            await producer.send(
+                "course.published",
+                {
+                    "event": "course.published",
+                    "course_id": course.id,
+                    "title": course.title,
+                    "instructor_id": course.instructor_id,
+                },
+            )
     return course
 
 async def delete_course(db: AsyncSession, course_id: str) -> None:

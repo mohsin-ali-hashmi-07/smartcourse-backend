@@ -6,9 +6,9 @@ from app.models.enrollment import Enrollment, Progress
 from app.schemas.enrollment import EnrollmentCreate, EnrollmentUpdate
 from app.repositories import enrollment_repository
 from app.core.settings import settings
+from app.core.kafka_producer import get_producer
 
 async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment:
-    # ── 1. Idempotency check ───────────────────────────────────────────────────
     existing = await enrollment_repository.get_enrollment_by_student_and_course(
         db, data.student_id, data.course_id
     )
@@ -18,7 +18,6 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
     # ── 2. Verify course exists and is published (HTTP call to course_service) ─
     await _verify_course_published(data.course_id)
 
-    # ── 3. Create enrollment ───────────────────────────────────────────────────
     enrollment = Enrollment(
         id=str(uuid.uuid4()),
         student_id=data.student_id,
@@ -27,7 +26,6 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
     )
     enrollment = await enrollment_repository.create_enrollment(db, enrollment)
 
-    # ── 4. Initialize progress ─────────────────────────────────────────────────
     total = await _get_course_module_count(data.course_id)
     progress = Progress(
         id=str(uuid.uuid4()),
@@ -38,8 +36,19 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
     )
     await enrollment_repository.create_progress(db, progress)
 
-    # ── 5. Reload enrollment with progress attached ────────────────────────────
-    return await enrollment_repository.get_enrollment_by_id(db, enrollment.id)
+    enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment.id)
+
+    producer = get_producer()
+    if producer:
+        await producer.send(
+            "enrollment.created",
+            {
+                "event":"enrollment.created",
+                "enrollment_id":enrollment.id,
+                "student_id": enrollment.student_id,
+                "course_id": enrollment.course_id,
+            },
+        )
 
 async def get_enrollment(db: AsyncSession, enrollment_id: str) -> Enrollment:
     enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
@@ -99,6 +108,21 @@ async def complete_module(
     if new_completed >= progress.total_modules:
         await enrollment_repository.update_enrollment(
             db, enrollment, {"status": "completed"}
+        )
+
+    producer = get_producer()
+    if producer:
+        await producer.send(
+            "progress.updated",
+            {
+                "event":"progress.updated",
+                "enrollment_id": enrollment_id,
+                "student_id": enrollment.student_id,
+                "course_id": enrollment.course_id,
+                "completed_modules": new_completed,
+                "total_modules": progress.total_modules,
+                "completion_percentage": new_percentage,
+            }
         )
 
     return updated_progress
