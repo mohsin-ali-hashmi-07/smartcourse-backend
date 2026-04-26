@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     debug: bool = True
     jwt_secret: str
     redis_url: str = "redis://localhost:6379"
+    kafka_bootstrap_servers: str = "localhost:9092"
 
     model_config = SettingsConfigDict(
         env_file=".env",
