@@ -50,6 +50,8 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
             },
         )
 
+    return enrollment
+
 async def get_enrollment(db: AsyncSession, enrollment_id: str) -> Enrollment:
     enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
     if not enrollment:
