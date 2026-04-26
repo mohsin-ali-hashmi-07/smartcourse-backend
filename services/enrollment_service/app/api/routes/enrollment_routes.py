@@ -38,6 +38,7 @@ async def get_enrollment(
 async def list_by_student(
     student_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
 ):
     enrollments = await enrollment_service.list_enrollments_by_student(db, student_id)
     return [EnrollmentResponse.model_validate(e) for e in enrollments]
@@ -47,6 +48,7 @@ async def list_by_student(
 async def list_by_course(
     course_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
 ):
     enrollments = await enrollment_service.list_enrollments_by_course(db, course_id)
     return [EnrollmentResponse.model_validate(e) for e in enrollments]
