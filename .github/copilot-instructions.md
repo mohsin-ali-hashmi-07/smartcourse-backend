@@ -113,3 +113,51 @@ For every resource, create schemas in order:
 - API tests: use `httpx.AsyncClient` with `ASGITransport`
 - Mock Kafka and Redis in unit tests — no real network calls in unit tests
 - Test critical paths: enrollment idempotency, course publishing state machine, auth middleware
+
+## Assignment Requirements
+
+### Week 1
+System architecture and service boundary diagrams
+Bounded context definitions for all core microservices
+API contracts for core flows (course, enrollment)
+Database schemas for Course and Enrollment services
+Service skeletons with FastAPI, User (CRUD, auth/roles), Course Management (CRUD), Enrollment (basic)
+Docker Compose setup (Postgres, Redis, Kafka, Temporal)
+Technical Design Doc (v1): service responsibilities, sync vs async decisions
+
+### Week 2
+Course creation and publishing flow implemented
+Enrollment and progress initialization flow (idempotent)
+Temporal workflows for:
+Course publishing
+Enrollment processing
+Kafka events for course, enrollment, and progress
+Analytics service consuming events
+Redis caching for course reads
+Sequence diagrams for publishing and enrollment workflows
+
+### Week 3
+GenAI service with:
+RAG-based student Q&A
+Instructor content generation (non-RAG)
+Streaming responses (SSE/WebSocket)
+Vector DB integration and retrieval pipeline
+Analytics aggregations/materialized views
+Concurrency handling for enrollments
+Workflow retries and idempotent event handling
+Design doc updates: AI design, failure recovery, backpressure
+
+### week 4
+OpenTelemetry tracing across services
+Prometheus metrics, Grafana dashboards, Jaeger traces
+Dashboards for system health, enrollments, workflows
+Performance and scaling considerations documented
+Final diagrams (architecture, workflows, sequences)
+Runnable system via Docker Compose + README with setup instructions
+
+### Mentor Notes
+Implement RBAC by using proper technique like making another table for permissions etc.
+implement Minio instead of AWS S3 to store images and pdf's etc.
+for eahc microservices workflows use its own orchestrator service instead of having one orchestrator for all the microservices. This will make the system more scalable and maintainable.
+completed modules should track which ones are completed instead of number of completed modules
+no temporal DB required
