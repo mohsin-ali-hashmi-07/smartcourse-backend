@@ -65,6 +65,11 @@ async def update_enrollment(
     await db.refresh(enrollment)
     return enrollment
 
+
+async def delete_enrollment(db: AsyncSession, enrollment: Enrollment) -> None:
+    await db.delete(enrollment)
+    await db.flush()
+
 async def get_progress_by_enrollment(
     db: AsyncSession, enrollment_id: str
 ) -> Progress | None:

@@ -21,6 +21,10 @@ class EnrollmentBase(BaseModel):
 class EnrollmentCreate(EnrollmentBase):
     pass
 
+
+class ProgressCreate(BaseModel):
+    total_modules: int
+
 class EnrollmentUpdate(BaseModel):
     status: str | None = None
 

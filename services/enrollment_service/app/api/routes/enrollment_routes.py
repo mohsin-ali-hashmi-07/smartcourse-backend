@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, get_current_user, require_student
 from app.schemas.enrollment import (
-    EnrollmentCreate, EnrollmentResponse, ProgressResponse
+    EnrollmentCreate, ProgressCreate, EnrollmentResponse, ProgressResponse
 )
 from shared.utils.auth import TokenData
 from app.services import enrollment_service
@@ -52,6 +52,31 @@ async def list_by_course(
 ):
     enrollments = await enrollment_service.list_enrollments_by_course(db, course_id)
     return [EnrollmentResponse.model_validate(e) for e in enrollments]
+
+@router.post(
+    "/{enrollment_id}/progress",
+    response_model=ProgressResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def init_progress(
+    enrollment_id: str,
+    data: ProgressCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        progress = await enrollment_service.init_progress(db, enrollment_id, data.total_modules)
+        return ProgressResponse.model_validate(progress)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_enrollment(
+    enrollment_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    await enrollment_service.hard_delete_enrollment(db, enrollment_id)
+
 
 @router.patch("/{enrollment_id}/drop", response_model=EnrollmentResponse)
 async def drop_enrollment(

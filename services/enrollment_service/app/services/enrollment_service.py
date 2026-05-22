@@ -9,14 +9,15 @@ from app.core.settings import settings
 from app.core.kafka_producer import get_producer
 
 async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment:
+    """
+    Creates only the enrollment DB record.
+    Verification, progress init, and Kafka are handled by enrollment_orchestrator.
+    """
     existing = await enrollment_repository.get_enrollment_by_student_and_course(
         db, data.student_id, data.course_id
     )
     if existing:
         return existing
-
-    # ── 2. Verify course exists and is published (HTTP call to course_service) ─
-    await _verify_course_published(data.course_id)
 
     enrollment = Enrollment(
         id=str(uuid.uuid4()),
@@ -24,33 +25,44 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
         course_id=data.course_id,
         status="active",
     )
-    enrollment = await enrollment_repository.create_enrollment(db, enrollment)
+    return await enrollment_repository.create_enrollment(db, enrollment)
 
-    total = await _get_course_module_count(data.course_id)
+
+async def init_progress(
+    db: AsyncSession, enrollment_id: str, total_modules: int
+) -> Progress:
+    """
+    Initializes a progress record for an existing enrollment.
+    Called by enrollment_orchestrator after create_enrollment succeeds.
+    """
+    enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        raise ValueError(f"enrollment not found: {enrollment_id}")
+
+    existing = await enrollment_repository.get_progress_by_enrollment(db, enrollment_id)
+    if existing:
+        return existing  # idempotent — already initialized
+
     progress = Progress(
         id=str(uuid.uuid4()),
-        enrollment_id=enrollment.id,
+        enrollment_id=enrollment_id,
         completed_modules=0,
-        total_modules=total,
+        total_modules=total_modules,
         completion_percentage=0.0,
     )
-    await enrollment_repository.create_progress(db, progress)
+    return await enrollment_repository.create_progress(db, progress)
 
-    enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment.id)
 
-    producer = get_producer()
-    if producer:
-        await producer.send(
-            "enrollment.created",
-            {
-                "event":"enrollment.created",
-                "enrollment_id":enrollment.id,
-                "student_id": enrollment.student_id,
-                "course_id": enrollment.course_id,
-            },
-        )
-
-    return enrollment
+async def hard_delete_enrollment(db: AsyncSession, enrollment_id: str) -> None:
+    """
+    SAGA COMPENSATION — permanently deletes an enrollment record.
+    Called by enrollment_orchestrator when init_progress fails,
+    to roll back the create_enrollment step.
+    """
+    enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        return  # already gone — idempotent
+    await enrollment_repository.delete_enrollment(db, enrollment)
 
 async def get_enrollment(db: AsyncSession, enrollment_id: str) -> Enrollment:
     enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
