@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.db.base import Base
-from app.models import user  # noqa: F401 — registers User with Base.metadata
+from app.models import user, rbac  # noqa: F401 — registers all models with Base.metadata
 from app.core.settings import settings
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("+asyncpg", ""))

@@ -6,10 +6,9 @@ import jwt
 
 from app.models.user import User
 from app.schemas.user import UserCreate
-from app.repositories import user_repository
+from app.repositories import user_repository, rbac_repository
 from app.constants.roles import USER_ROLES
 from app.core.settings import settings
-
 
 
 def hash_password(plain_password: str) -> str:
@@ -32,7 +31,20 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
         role=data.role,
         is_active=True
     )
-    return await user_repository.create_user(db, user)
+    user = await user_repository.create_user(db, user)
+
+    permissions_map = {
+        "student": ["courses:read", "enrollments:write"],
+        "instructor": ["courses:write", "courses:read"],
+        "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
+    }
+    await rbac_repository.assign_role(
+        db,
+        user.id,
+        user.role,
+        permissions_map.get(user.role, []),
+    )
+    return user
 
 async def get_user(db: AsyncSession, user_id:str) -> User:
     user= await user_repository.get_user_by_id(db, user_id)
