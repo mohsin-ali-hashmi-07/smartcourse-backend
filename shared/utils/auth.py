@@ -8,12 +8,12 @@ bearer_scheme = HTTPBearer()
 
 class TokenData(BaseModel):
     user_id: str
-    roles: list[str]
+    role: str
 
 def verify_token(secret: str, token: str) -> TokenData:
     try:
         payload = jwt.decode(token, secret, algorithms=["HS256"])
-        return TokenData(user_id=payload["sub"], roles=payload["roles"])
+        return TokenData(user_id=payload["sub"], role=payload["role"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

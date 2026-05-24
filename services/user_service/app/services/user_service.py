@@ -38,7 +38,7 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
         "instructor": ["courses:write", "courses:read"],
         "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
     }
-    await rbac_repository.assign_role(
+    await rbac_repository.replace_role(
         db,
         user.id,
         user.role,
@@ -64,7 +64,18 @@ async def assign_role(db: AsyncSession, user_id: str, role: str) -> User:
     if not user:
         raise ValueError(f"user not found: {user_id}")
 
-    return await user_repository.update_user_role(db, user, role)
+    # Update the legacy role column on the users table
+    await user_repository.update_user_role(db, user, role)
+
+    # Sync user_roles table: replace old role row with new one
+    permissions_map = {
+        "student": ["courses:read", "enrollments:write"],
+        "instructor": ["courses:write", "courses:read"],
+        "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
+    }
+    await rbac_repository.replace_role(db, user_id, role, permissions_map.get(role, []))
+
+    return user
 
 async def deactivate_user(db: AsyncSession, user_id: str) -> User:
     user = await user_repository.get_user_by_id(db, user_id)
@@ -74,11 +85,11 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> User:
     return await user_repository.deactivate_user(db, user)
 
 
-def _create_access_token(user_id: str, roles: list[str]) -> str:
+def _create_access_token(user_id: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {
         "sub": user_id,
-        "roles": roles,
+        "role": role,
         "exp": expire,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
@@ -91,12 +102,12 @@ async def login(db: AsyncSession, email: str, password: str) -> dict:
         raise ValueError("account is deactivated")
 
     user_roles = await rbac_repository.get_user_roles(db, user.id)
-    roles = [ur.role for ur in user_roles]
+    role = user_roles[0].role if user_roles else user.role
 
-    token = _create_access_token(user.id, roles)
+    token = _create_access_token(user.id, role)
     return {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "roles": roles,
+        "role": role,
     }

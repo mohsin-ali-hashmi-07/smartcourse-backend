@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, get_current_user, require_admin
-from app.schemas.user import UserCreate, UserResponse, UserRoleUpdate
+from app.schemas.user import UserCreate, UserResponse
 from shared.utils.auth import TokenData
 from app.services import user_service
 
@@ -31,19 +31,6 @@ async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
         return UserResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail=str(e))
-    
-@router.patch("/{user_id}/role", response_model=UserResponse)
-async def assign_role(
-    user_id: str,
-    data: UserRoleUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: TokenData = Depends(require_admin),
-):
-    try:
-        user = await user_service.assign_role(db, user_id, data.role)
-        return UserResponse.model_validate(user)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{user_id}", response_model=UserResponse)
 async def deactivate_user(user_id: str, db: AsyncSession = Depends(get_db),  current_user: TokenData = Depends(require_admin),):

@@ -31,7 +31,7 @@ def get_current_user(
 def require_instructor(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if "instructor" not in current_user.roles and "admin" not in current_user.roles:
+    if current_user.role not in ("instructor", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only instructors can perform this action",
@@ -41,7 +41,7 @@ def require_instructor(
 def require_admin(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if "admin" not in current_user.roles:
+    if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only admins can perform this action",
