@@ -10,7 +10,6 @@ class ProgressResponse(BaseModel):
     enrollment_id: str
     completed_modules: int
     total_modules: int
-    completion_percentage: float
     created_at: datetime
     updated_at: datetime
 

@@ -48,7 +48,6 @@ async def init_progress(
         enrollment_id=enrollment_id,
         completed_modules=0,
         total_modules=total_modules,
-        completion_percentage=0.0,
     )
     return await enrollment_repository.create_progress(db, progress)
 
@@ -109,12 +108,10 @@ async def complete_module(
         raise ValueError("all modules are already completed")
 
     new_completed = progress.completed_modules + 1
-    new_percentage = round((new_completed / progress.total_modules) * 100, 2)
 
     updated_progress = await enrollment_repository.update_progress(
         db, progress, {
             "completed_modules": new_completed,
-            "completion_percentage": new_percentage,
         }
     )
 
@@ -135,7 +132,6 @@ async def complete_module(
                 "course_id": enrollment.course_id,
                 "completed_modules": new_completed,
                 "total_modules": progress.total_modules,
-                "completion_percentage": new_percentage,
             }
         )
 

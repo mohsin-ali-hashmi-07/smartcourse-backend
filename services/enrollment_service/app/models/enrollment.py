@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, Integer, Float, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, Integer, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
@@ -32,6 +32,5 @@ class Progress(Base, TimestampMixin):
     )
     completed_modules: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_modules: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    completion_percentage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     enrollment: Mapped["Enrollment"] = relationship("Enrollment", back_populates="progress")
