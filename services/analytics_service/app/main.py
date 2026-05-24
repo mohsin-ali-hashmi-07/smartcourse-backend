@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.api import api_router
 from app.core.settings import settings
 from app.kafka.consumer import start_consumer, stop_consumer
@@ -17,6 +18,8 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
+
+Instrumentator().instrument(app).expose(app)
 
 app.include_router(api_router, prefix="/api/v1")
 
