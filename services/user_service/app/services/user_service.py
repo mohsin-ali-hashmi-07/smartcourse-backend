@@ -74,11 +74,11 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> User:
     return await user_repository.deactivate_user(db, user)
 
 
-def _create_access_token(user_id: str, role: str) -> str:
+def _create_access_token(user_id: str, roles: list[str]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {
         "sub": user_id,
-        "role": role,
+        "roles": roles,
         "exp": expire,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
@@ -89,10 +89,14 @@ async def login(db: AsyncSession, email: str, password: str) -> dict:
         raise ValueError("invalid email or password")
     if not user.is_active:
         raise ValueError("account is deactivated")
-    token = _create_access_token(user.id, user.role)
+
+    user_roles = await rbac_repository.get_user_roles(db, user.id)
+    roles = [ur.role for ur in user_roles]
+
+    token = _create_access_token(user.id, roles)
     return {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "role": user.role,
+        "roles": roles,
     }

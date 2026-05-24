@@ -33,7 +33,7 @@ def get_current_user(
 def require_student(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if current_user.role != "student":
+    if "student" not in current_user.roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only students can perform this action",
@@ -43,7 +43,7 @@ def require_student(
 def require_admin(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if current_user.role != "admin":
+    if "admin" not in current_user.roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only admins can perform this action",
