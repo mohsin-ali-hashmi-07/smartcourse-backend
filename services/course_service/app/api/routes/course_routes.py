@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, get_current_user, require_instructor
@@ -8,6 +8,7 @@ from app.schemas.course import (
 )
 from shared.utils.auth import TokenData
 from app.services import course_service
+from app.core import minio_client
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -137,3 +138,70 @@ async def delete_module(
         await course_service.delete_module(db, module_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# ── MinIO file upload ──────────────────────────────────────────────────────────
+
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "video/mp4",
+    "video/webm",
+    "image/png",
+    "image/jpeg",
+}
+
+@router.post(
+    "/{course_id}/modules/{module_id}/upload",
+    status_code=status.HTTP_200_OK,
+)
+async def upload_module_material(
+    course_id: str,
+    module_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
+):
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"unsupported file type: {file.content_type}. Allowed: pdf, mp4, webm, png, jpeg",
+        )
+
+    try:
+        data = await file.read()
+        object_key = f"modules/{module_id}/{file.filename}"
+        await minio_client.upload_file(object_key, data, file.content_type)
+        module = await course_service.set_module_material(db, module_id, object_key)
+        url = await minio_client.get_presigned_url(object_key)
+        return {
+            "module_id": module.id,
+            "object_key": object_key,
+            "url": url,
+            "expires_in": 3600,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get(
+    "/{course_id}/modules/{module_id}/material",
+    status_code=status.HTTP_200_OK,
+)
+async def get_module_material(
+    course_id: str,
+    module_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        module = await course_service.get_module(db, module_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    if not module.material_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="no material uploaded for this module",
+        )
+
+    url = await minio_client.get_presigned_url(module.material_url)
+    return {"url": url, "expires_in": 3600}

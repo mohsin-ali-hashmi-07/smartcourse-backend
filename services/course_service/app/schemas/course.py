@@ -30,6 +30,7 @@ class ModuleResponse(ModuleBase):
 
     id: str
     course_id: str
+    material_url: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     kafka_bootstrap_servers: str = "localhost:9092"
 
+    # MinIO / S3-compatible object storage
+    minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "course-materials"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"

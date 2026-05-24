@@ -36,5 +36,6 @@ class Module(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    material_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     course: Mapped["Course"] = relationship("Course", back_populates="modules")

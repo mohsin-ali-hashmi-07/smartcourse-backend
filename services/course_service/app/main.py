@@ -4,12 +4,14 @@ from app.api.routes import api_router
 from app.core.settings import settings
 from app.core.redis_client import connect_redis, disconnect_redis
 from app.core.kafka_producer import start_producer, stop_producer
+from app.core.minio_client import init_bucket
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_redis()
     await start_producer()
+    await init_bucket()
     yield
     await stop_producer()
     await disconnect_redis()

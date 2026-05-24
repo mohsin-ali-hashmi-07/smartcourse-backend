@@ -167,6 +167,17 @@ async def delete_module(db: AsyncSession, module_id: str) -> None:
     await course_repository.delete_module(db, module)
     await _delete_course_cache(course_id)
 
+
+async def set_module_material(
+    db: AsyncSession, module_id: str, object_key: str
+) -> Module:
+    module = await course_repository.get_module_by_id(db, module_id)
+    if not module:
+        raise ValueError(f"module not found: {module_id}")
+    module = await course_repository.update_module(db, module, {"material_url": object_key})
+    await _delete_course_cache(module.course_id)
+    return module
+
 def _validate_status_transition(current: str, new: str) -> None:
     allowed_transitions: dict[str, list[str]] = {
         "draft":     ["published"],
