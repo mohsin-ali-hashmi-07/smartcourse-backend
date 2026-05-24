@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from temporalio.client import Client as TemporalClient
 
 from app.api.dependencies import get_db, get_current_user, require_student
 from app.schemas.enrollment import (
@@ -7,15 +8,46 @@ from app.schemas.enrollment import (
 )
 from shared.utils.auth import TokenData
 from app.services import enrollment_service
+from app.core.settings import settings
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
-@router.post("/", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_202_ACCEPTED)
 async def enroll_student(
     data: EnrollmentCreate,
-    db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(require_student),
 ):
+    """
+    Start enrollment via Temporal workflow.
+    Returns workflow ID — the orchestrator handles enrollment creation,
+    progress init, and Kafka event emission.
+    """
+    try:
+        client = await TemporalClient.connect(settings.temporal_host)
+        workflow_id = f"enrollment-{data.student_id}-{data.course_id}"
+        handle = await client.start_workflow(
+            "EnrollmentWorkflow",
+            args=[data.student_id, data.course_id],
+            id=workflow_id,
+            task_queue="enrollment-task-queue",
+        )
+        return {
+            "workflow_id": handle.id,
+            "status": "started",
+            "message": "enrollment workflow initiated",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ── Internal endpoints (called by orchestrator, no JWT auth) ────────────────────
+
+@router.post("/internal/create", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def internal_create_enrollment(
+    data: EnrollmentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal — called by enrollment_orchestrator to create the DB record."""
     try:
         enrollment = await enrollment_service.enroll_student(db, data)
         return EnrollmentResponse.model_validate(enrollment)

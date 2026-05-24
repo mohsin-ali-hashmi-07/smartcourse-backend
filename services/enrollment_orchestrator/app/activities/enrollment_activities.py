@@ -40,7 +40,7 @@ async def create_enrollment(student_id: str, course_id: str) -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{settings.enrollment_service_url}/api/v1/enrollments/",
+            f"{settings.enrollment_service_url}/api/v1/enrollments/internal/create",
             json={
                 "student_id": student_id,
                 "course_id": course_id,

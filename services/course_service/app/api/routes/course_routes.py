@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from temporalio.client import Client as TemporalClient
 
 from app.api.dependencies import get_db, get_current_user, require_instructor
 from app.schemas.course import (
@@ -9,6 +11,9 @@ from app.schemas.course import (
 from shared.utils.auth import TokenData
 from app.services import course_service
 from app.core import minio_client
+from app.core.settings import settings
+
+bearer_scheme = HTTPBearer()
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -58,6 +63,34 @@ async def update_course(
         course = await course_service.update_course(db, course_id, data)
         return CourseResponse.model_validate(course)
     except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{course_id}/publish", status_code=status.HTTP_202_ACCEPTED)
+async def publish_course(
+    course_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    current_user: TokenData = Depends(require_instructor),
+):
+    """
+    Start course publishing via Temporal workflow.
+    The orchestrator validates the course, updates status to published, and emits Kafka event.
+    """
+    try:
+        client = await TemporalClient.connect(settings.temporal_host)
+        workflow_id = f"publish-course-{course_id}"
+        handle = await client.start_workflow(
+            "CoursePublishWorkflow",
+            args=[course_id, credentials.credentials],
+            id=workflow_id,
+            task_queue="course-task-queue",
+        )
+        return {
+            "workflow_id": handle.id,
+            "status": "started",
+            "message": "course publish workflow initiated",
+        }
+    except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 

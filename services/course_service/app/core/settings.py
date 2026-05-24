@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     redis_url: str = "redis://localhost:6379"
     kafka_bootstrap_servers: str = "localhost:9092"
+    temporal_host: str = "localhost:7233"
 
     # MinIO / S3-compatible object storage
     minio_endpoint: str = "http://localhost:9000"

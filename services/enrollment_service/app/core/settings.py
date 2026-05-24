@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     course_service_url: str
     jwt_secret: str
     kafka_bootstrap_servers: str = "localhost:9092"
+    temporal_host: str = "localhost:7233"
     
     model_config = SettingsConfigDict(
         env_file=".env",

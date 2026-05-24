@@ -12,7 +12,7 @@ with workflow.unsafe.imports_passed_through():
 @workflow.defn
 class CoursePublishWorkflow:
     @workflow.run
-    async def run(self, course_id: str, instructor_token: str)
+    async def run(self, course_id: str, instructor_token: str):
         retry_policy = RetryPolicy(
             maximum_attempts=3,
             initial_interval=timedelta(seconds=2)
