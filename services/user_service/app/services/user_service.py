@@ -18,42 +18,50 @@ def hash_password(plain_password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
+PERMISSIONS_MAP = {
+    "student": ["courses:read", "enrollments:write"],
+    "instructor": ["courses:write", "courses:read"],
+    "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
+}
+
+
 async def register_user(db: AsyncSession, data: UserCreate) -> User:
     existing = await user_repository.get_user_by_email(db, data.email)
     if existing:
         raise ValueError(f"email already registered: {data.email}")
-    
+
     user = User(
         id=str(uuid.uuid4()),
         email=data.email,
         hashed_password=hash_password(data.password),
         full_name=data.full_name,
-        role=data.role,
-        is_active=True
+        is_active=True,
     )
     user = await user_repository.create_user(db, user)
 
-    permissions_map = {
-        "student": ["courses:read", "enrollments:write"],
-        "instructor": ["courses:write", "courses:read"],
-        "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
-    }
     await rbac_repository.replace_role(
         db,
         user.id,
-        user.role,
-        permissions_map.get(user.role, []),
+        data.role,
+        PERMISSIONS_MAP.get(data.role, []),
     )
+    user.role = data.role  # transient attr for response serialization
     return user
 
-async def get_user(db: AsyncSession, user_id:str) -> User:
-    user= await user_repository.get_user_by_id(db, user_id)
+async def get_user(db: AsyncSession, user_id: str) -> User:
+    user = await user_repository.get_user_by_id(db, user_id)
     if not user:
         raise ValueError(f"user not found: {user_id}")
+    roles = await rbac_repository.get_user_roles(db, user_id)
+    user.role = roles[0].role if roles else "student"
     return user
 
 async def list_users(db: AsyncSession) -> list[User]:
-    return await user_repository.get_all_users(db)
+    users = await user_repository.get_all_users(db)
+    for u in users:
+        roles = await rbac_repository.get_user_roles(db, u.id)
+        u.role = roles[0].role if roles else "student"
+    return users
 
 
 async def assign_role(db: AsyncSession, user_id: str, role: str) -> User:
@@ -64,17 +72,9 @@ async def assign_role(db: AsyncSession, user_id: str, role: str) -> User:
     if not user:
         raise ValueError(f"user not found: {user_id}")
 
-    # Update the legacy role column on the users table
-    await user_repository.update_user_role(db, user, role)
+    await rbac_repository.replace_role(db, user_id, role, PERMISSIONS_MAP.get(role, []))
 
-    # Sync user_roles table: replace old role row with new one
-    permissions_map = {
-        "student": ["courses:read", "enrollments:write"],
-        "instructor": ["courses:write", "courses:read"],
-        "admin": ["users:manage", "courses:write", "courses:read", "enrollments:read"],
-    }
-    await rbac_repository.replace_role(db, user_id, role, permissions_map.get(role, []))
-
+    user.role = role  # transient attr for response serialization
     return user
 
 async def deactivate_user(db: AsyncSession, user_id: str) -> User:
@@ -82,7 +82,10 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> User:
     if not user:
         raise ValueError(f"user not found: {user_id}")
 
-    return await user_repository.deactivate_user(db, user)
+    user = await user_repository.deactivate_user(db, user)
+    roles = await rbac_repository.get_user_roles(db, user_id)
+    user.role = roles[0].role if roles else "student"
+    return user
 
 
 def _create_access_token(user_id: str, role: str) -> str:
@@ -102,7 +105,9 @@ async def login(db: AsyncSession, email: str, password: str) -> dict:
         raise ValueError("account is deactivated")
 
     user_roles = await rbac_repository.get_user_roles(db, user.id)
-    role = user_roles[0].role if user_roles else user.role
+    if not user_roles:
+        raise ValueError("user has no assigned role")
+    role = user_roles[0].role
 
     token = _create_access_token(user.id, role)
     return {

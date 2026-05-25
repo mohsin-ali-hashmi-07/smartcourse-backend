@@ -6,7 +6,7 @@ from app.core.settings import settings
 
 @activity.defn
 async def validate_course(course_id: str) -> dict:
-    """Fetch course from course_service and verify it exists."""
+    """Fetch course from course_service and verify it has modules."""
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.course_service_url}/api/v1/courses/{course_id}",
@@ -16,7 +16,10 @@ async def validate_course(course_id: str) -> dict:
         raise ValueError(f"course not found: {course_id}")
     if response.status_code != 200:
         raise ValueError(f"course_service error: {response.status_code}")
-    return response.json()
+    course = response.json()
+    if not course.get("modules"):
+        raise ValueError(f"course {course_id} has no modules — cannot publish")
+    return course
 
 @activity.defn
 async def publish_course(course_id: str, instructor_token: str) -> dict:
@@ -33,6 +36,19 @@ async def publish_course(course_id: str, instructor_token: str) -> dict:
             f"failed to publish course {course_id}: {response.text}"
         )
     return response.json()
+
+@activity.defn
+async def revert_course_to_draft(course_id: str) -> None:
+    """Saga compensation — revert course status back to draft on workflow failure."""
+    async with httpx.AsyncClient() as client:
+        response = await client.patch(
+            f"{settings.course_service_url}/api/v1/courses/internal/{course_id}/revert-to-draft",
+            timeout=10.0,
+        )
+    if response.status_code != 200:
+        raise ValueError(
+            f"failed to revert course {course_id} to draft: {response.text}"
+        )
 
 @activity.defn
 async def emit_course_published_event(

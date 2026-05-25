@@ -6,6 +6,7 @@ from app.workflows.course_publish_workflow import CoursePublishWorkflow
 from app.activities.course_activities import (
     validate_course,
     publish_course,
+    revert_course_to_draft,
     emit_course_published_event,
 )
 
@@ -19,6 +20,7 @@ async def main():
         activities=[
             validate_course,
             publish_course,
+            revert_course_to_draft,
             emit_course_published_event,
         ],
     )

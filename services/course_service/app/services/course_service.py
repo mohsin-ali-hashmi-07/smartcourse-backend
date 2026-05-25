@@ -168,12 +168,13 @@ async def set_module_material(
 
 def _validate_status_transition(current: str, new: str) -> None:
     allowed_transitions: dict[str, list[str]] = {
-        "draft":     ["published"],
-        "published": ["archived"],
-        "archived":  [],
+        "draft":      ["publishing"],
+        "publishing": ["published", "draft"],
+        "published":  ["archived"],
+        "archived":   [],
     }
-    if new not in allowed_transitions[current]:
+    if new not in allowed_transitions.get(current, []):
         raise ValueError(
             f"invalid status transition: '{current}' → '{new}'. "
-            f"Allowed: {allowed_transitions[current]}"
+            f"Allowed: {allowed_transitions.get(current, [])}"
         )

@@ -69,14 +69,21 @@ async def update_course(
 @router.post("/{course_id}/publish", status_code=status.HTTP_202_ACCEPTED)
 async def publish_course(
     course_id: str,
+    db: AsyncSession = Depends(get_db),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: TokenData = Depends(require_instructor),
 ):
     """
     Start course publishing via Temporal workflow.
-    The orchestrator validates the course, updates status to published, and emits Kafka event.
+    Sets status to 'publishing' immediately, then the orchestrator handles
+    validation, publish, and Kafka event — with rollback to 'draft' on failure.
     """
     try:
+        from app.schemas.course import CourseUpdate
+        await course_service.update_course(
+            db, course_id, CourseUpdate(status="publishing")
+        )
+
         client = await TemporalClient.connect(settings.temporal_host)
         workflow_id = f"publish-course-{course_id}"
         handle = await client.start_workflow(
@@ -87,7 +94,7 @@ async def publish_course(
         )
         return {
             "workflow_id": handle.id,
-            "status": "started",
+            "status": "publishing",
             "message": "course publish workflow initiated",
         }
     except Exception as e:
@@ -238,3 +245,21 @@ async def get_module_material(
 
     url = await minio_client.get_presigned_url(module.material_url)
     return {"url": url, "expires_in": 3600}
+
+
+# ── Internal endpoints (called by orchestrator, no JWT auth) ────────────────────
+
+@router.patch("/internal/{course_id}/revert-to-draft", response_model=CourseResponse)
+async def internal_revert_to_draft(
+    course_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal — called by course_orchestrator Saga to rollback on workflow failure."""
+    try:
+        from app.schemas.course import CourseUpdate
+        course = await course_service.update_course(
+            db, course_id, CourseUpdate(status="draft")
+        )
+        return CourseResponse.model_validate(course)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
