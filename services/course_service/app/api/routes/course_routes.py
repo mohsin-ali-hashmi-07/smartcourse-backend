@@ -70,7 +70,6 @@ async def update_course(
 async def publish_course(
     course_id: str,
     db: AsyncSession = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: TokenData = Depends(require_instructor),
 ):
     """
@@ -88,7 +87,7 @@ async def publish_course(
         workflow_id = f"publish-course-{course_id}"
         handle = await client.start_workflow(
             "CoursePublishWorkflow",
-            args=[course_id, credentials.credentials],
+            args=[course_id],
             id=workflow_id,
             task_queue="course-task-queue",
         )
@@ -249,13 +248,41 @@ async def get_module_material(
 
 # ── Internal endpoints (called by orchestrator, no JWT auth) ────────────────────
 
+@router.patch("/internal/{course_id}/publish", response_model=CourseResponse)
+async def internal_publish_course(
+    course_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal — called by course_orchestrator to flip publishing → published."""
+    try:
+        from app.schemas.course import CourseUpdate
+        course = await course_service.update_course(
+            db, course_id, CourseUpdate(status="published")
+        )
+        return CourseResponse.model_validate(course)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.patch("/internal/{course_id}/revert-to-draft", response_model=CourseResponse)
 async def internal_revert_to_draft(
     course_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Internal — called by course_orchestrator Saga to rollback on workflow failure."""
+    """
+    Internal — called by course_orchestrator Saga to rollback on workflow failure.
+    Idempotent — if course is already 'draft', returns it unchanged.
+    """
     try:
+        course = await course_service.get_course(db, course_id)
+        # Idempotent: already reverted
+        if isinstance(course, dict):
+            current_status = course.get("status")
+        else:
+            current_status = course.status
+        if current_status == "draft":
+            return CourseResponse.model_validate(course)
+
         from app.schemas.course import CourseUpdate
         course = await course_service.update_course(
             db, course_id, CourseUpdate(status="draft")

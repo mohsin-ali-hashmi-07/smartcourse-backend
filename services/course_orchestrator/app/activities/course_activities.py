@@ -1,8 +1,10 @@
 import json
 import httpx
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 from aiokafka import AIOKafkaProducer
 from app.core.settings import settings
+
 
 @activity.defn
 async def validate_course(course_id: str) -> dict:
@@ -10,32 +12,41 @@ async def validate_course(course_id: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.course_service_url}/api/v1/courses/{course_id}",
-            timeout=10.0
+            timeout=10.0,
         )
     if response.status_code == 404:
-        raise ValueError(f"course not found: {course_id}")
+        # Course doesn't exist — retrying won't help
+        raise ApplicationError(
+            f"course not found: {course_id}", non_retryable=True
+        )
     if response.status_code != 200:
-        raise ValueError(f"course_service error: {response.status_code}")
+        # Transient — retry
+        raise RuntimeError(f"course_service error: {response.status_code}")
+
     course = response.json()
     if not course.get("modules"):
-        raise ValueError(f"course {course_id} has no modules — cannot publish")
+        # Business rule violation — retrying won't fix this
+        raise ApplicationError(
+            f"course {course_id} has no modules — cannot publish",
+            non_retryable=True,
+        )
     return course
 
+
 @activity.defn
-async def publish_course(course_id: str, instructor_token: str) -> dict:
-    """Update course status to published via course_service API."""
+async def publish_course(course_id: str) -> dict:
+    """Update course status to published via internal endpoint (no auth)."""
     async with httpx.AsyncClient() as client:
         response = await client.patch(
-            f"{settings.course_service_url}/api/v1/courses/{course_id}",
-            json={"status": "published"},
-            headers={"Authorization": f"Bearer {instructor_token}"},
+            f"{settings.course_service_url}/api/v1/courses/internal/{course_id}/publish",
             timeout=10.0,
         )
     if response.status_code != 200:
-        raise ValueError(
+        raise RuntimeError(
             f"failed to publish course {course_id}: {response.text}"
         )
     return response.json()
+
 
 @activity.defn
 async def revert_course_to_draft(course_id: str) -> None:
@@ -46,9 +57,10 @@ async def revert_course_to_draft(course_id: str) -> None:
             timeout=10.0,
         )
     if response.status_code != 200:
-        raise ValueError(
+        raise RuntimeError(
             f"failed to revert course {course_id} to draft: {response.text}"
         )
+
 
 @activity.defn
 async def emit_course_published_event(

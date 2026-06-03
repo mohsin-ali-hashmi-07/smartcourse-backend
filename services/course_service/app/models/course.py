@@ -14,7 +14,7 @@ class Course(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     instructor_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     status: Mapped[str] = mapped_column(
-        SAEnum("draft", "published", "archived", name="course_status_enum"),
+        SAEnum("draft","publishing", "published", "archived", name="course_status_enum"),
         nullable=False,
         default="draft",
     )

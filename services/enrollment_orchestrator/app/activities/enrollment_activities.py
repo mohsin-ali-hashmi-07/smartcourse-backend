@@ -1,7 +1,7 @@
 import json
-import uuid
 import httpx
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 from aiokafka import AIOKafkaProducer
 from app.core.settings import settings
 
@@ -10,7 +10,7 @@ from app.core.settings import settings
 async def verify_course_published(course_id: str) -> dict:
     """
     Call course_service to confirm the course exists and is published.
-    Raises ValueError if not found or not published — Temporal will retry.
+    Validation failures are non-retryable — they will not succeed on retry.
     Returns the course dict so the workflow can use module count etc.
     """
     async with httpx.AsyncClient() as client:
@@ -20,13 +20,18 @@ async def verify_course_published(course_id: str) -> dict:
         )
 
     if response.status_code == 404:
-        raise ValueError(f"course not found: {course_id}")
+        raise ApplicationError(
+            f"course not found: {course_id}", non_retryable=True
+        )
     if response.status_code != 200:
-        raise ValueError(f"course_service error: {response.status_code}")
+        # Transient — let Temporal retry
+        raise RuntimeError(f"course_service error: {response.status_code}")
 
     course = response.json()
     if course["status"] != "published":
-        raise ValueError(f"course is not published: {course_id}")
+        raise ApplicationError(
+            f"course is not published: {course_id}", non_retryable=True
+        )
 
     return course
 
