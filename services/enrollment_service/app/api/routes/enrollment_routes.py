@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client as TemporalClient
 
-from app.api.dependencies import get_db, get_current_user, require_student
+from app.api.dependencies import get_db, get_current_user, require_student, require_admin
 from app.schemas.enrollment import (
-    EnrollmentCreate, ProgressCreate, EnrollmentResponse, ProgressResponse
+    EnrollmentCreate, CourseEnrollRequest, ProgressCreate, EnrollmentResponse, ProgressResponse
 )
 from shared.utils.auth import TokenData
 from app.services import enrollment_service
@@ -14,20 +14,20 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
 @router.post("/", status_code=status.HTTP_202_ACCEPTED)
 async def enroll_student(
-    data: EnrollmentCreate,
+    data: CourseEnrollRequest,
     current_user: TokenData = Depends(require_student),
 ):
     """
     Start enrollment via Temporal workflow.
-    Returns workflow ID — the orchestrator handles enrollment creation,
-    progress init, and Kafka event emission.
+    student_id is taken from the JWT — clients cannot enroll on behalf of others.
     """
     try:
         client = await TemporalClient.connect(settings.temporal_host)
-        workflow_id = f"enrollment-{data.student_id}-{data.course_id}"
+        student_id = current_user.user_id
+        workflow_id = f"enrollment-{student_id}-{data.course_id}"
         handle = await client.start_workflow(
             "EnrollmentWorkflow",
-            args=[data.student_id, data.course_id],
+            args=[student_id, data.course_id],
             id=workflow_id,
             task_queue="enrollment-task-queue",
         )
@@ -66,21 +66,30 @@ async def get_enrollment(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-@router.get("/student/{student_id}", response_model=list[EnrollmentResponse])
+@router.get("/my-enrollments", response_model=list[EnrollmentResponse])
+async def list_my_enrollments(
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_student),
+):
+    enrollments = await enrollment_service.list_enrollments_by_student(db, current_user.user_id)
+    return [EnrollmentResponse.model_validate(e) for e in enrollments]
+
+
+@router.get("/admin/student/{student_id}", response_model=list[EnrollmentResponse])
 async def list_by_student(
     student_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_admin),
 ):
     enrollments = await enrollment_service.list_enrollments_by_student(db, student_id)
     return [EnrollmentResponse.model_validate(e) for e in enrollments]
 
 
-@router.get("/course/{course_id}", response_model=list[EnrollmentResponse])
+@router.get("/admin/course/{course_id}", response_model=list[EnrollmentResponse])
 async def list_by_course(
     course_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_admin),
 ):
     enrollments = await enrollment_service.list_enrollments_by_course(db, course_id)
     return [EnrollmentResponse.model_validate(e) for e in enrollments]
@@ -114,9 +123,15 @@ async def hard_delete_enrollment(
 async def drop_enrollment(
     enrollment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_student),
 ):
     try:
+        enrollment = await enrollment_service.get_enrollment(db, enrollment_id)
+        if enrollment.student_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="you can only drop your own enrollment",
+            )
         enrollment = await enrollment_service.drop_enrollment(db, enrollment_id)
         return EnrollmentResponse.model_validate(enrollment)
     except ValueError as e:

@@ -35,12 +35,12 @@ async def list_courses(db: AsyncSession = Depends(get_db)):
     courses = await course_service.list_courses(db)
     return [CourseResponse.model_validate(c) for c in courses]
 
-@router.get("/instructor/{instructor_id}", response_model=list[CourseResponse])
-async def list_courses_by_instructor(
-    instructor_id: str,
+@router.get("/my-courses", response_model=list[CourseResponse])
+async def list_my_courses(
     db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_instructor),
 ):
-    courses = await course_service.list_courses_by_instructor(db, instructor_id)
+    courses = await course_service.list_courses_by_instructor(db, current_user.user_id)
     return [CourseResponse.model_validate(c) for c in courses]
 
 
@@ -71,32 +71,33 @@ async def publish_course(
     course_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(require_instructor),
+    temporal_client: TemporalClient = Depends(get_temporal_client),
 ):
-    """
-    Start course publishing via Temporal workflow.
-    Sets status to 'publishing' immediately, then the orchestrator handles
-    validation, publish, and Kafka event — with rollback to 'draft' on failure.
-    """
+    workflow_id = f"publish-course-{course_id}"
     try:
-        from app.schemas.course import CourseUpdate
-        await course_service.update_course(
-            db, course_id, CourseUpdate(status="publishing")
-        )
-
-        client = await TemporalClient.connect(settings.temporal_host)
-        workflow_id = f"publish-course-{course_id}"
-        handle = await client.start_workflow(
+        # 1. Start workflow FIRST — before touching DB status
+        handle = await temporal_client.start_workflow(
             "CoursePublishWorkflow",
             args=[course_id],
             id=workflow_id,
             task_queue="course-task-queue",
         )
+        # 2. Only update status once workflow is safely started
+        from app.schemas.course import CourseUpdate
+        await course_service.update_course(db, course_id, CourseUpdate(status="publishing"))
         return {
             "workflow_id": handle.id,
             "status": "publishing",
             "message": "course publish workflow initiated",
         }
-    except Exception as e:
+    except RPCError as e:
+        if "already started" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="a publish workflow is already running for this course",
+            )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 

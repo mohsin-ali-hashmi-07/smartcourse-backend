@@ -4,8 +4,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from typing import AsyncGenerator
 from fastapi import Depends, HTTPException, status
+from fastapi import Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from temporalio.client import Client as TemporalClient
 
 from app.db.session import AsyncSessionLocal
 from app.core.settings import settings
@@ -27,6 +29,8 @@ def get_current_user(
 ) -> TokenData:
     return verify_token(settings.jwt_secret, credentials.credentials)
 
+def get_temporal_client(request: Request) -> TemporalClient:
+    return request.app.state.temporal_client
 
 def require_instructor(
     current_user: TokenData = Depends(get_current_user),

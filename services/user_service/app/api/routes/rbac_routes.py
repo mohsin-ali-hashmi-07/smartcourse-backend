@@ -7,7 +7,7 @@ from app.schemas.user import UserResponse, UserRoleUpdate
 from app.services import user_service
 from shared.utils.auth import TokenData
 
-router = APIRouter(prefix="/rbac", tags=["rbac"])
+router = APIRouter(prefix="/admin/rbac", tags=["admin"])
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)

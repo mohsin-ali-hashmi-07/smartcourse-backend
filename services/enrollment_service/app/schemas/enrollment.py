@@ -21,6 +21,11 @@ class EnrollmentCreate(EnrollmentBase):
     pass
 
 
+class CourseEnrollRequest(BaseModel):
+    """Public enroll request — student_id is taken from JWT, not the body."""
+    course_id: str
+
+
 class ProgressCreate(BaseModel):
     total_modules: int
 
