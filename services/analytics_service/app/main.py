@@ -3,14 +3,20 @@ from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.api import api_router
 from app.core.settings import settings
+from app.db.base import Base
+from app.db.session import engine
 from app.kafka.consumer import start_consumer, stop_consumer
+import app.models.analytics  # noqa: F401 — ensure models are registered with Base
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     await start_consumer()
     yield
     await stop_consumer()
+    await engine.dispose()
 
 
 app = FastAPI(

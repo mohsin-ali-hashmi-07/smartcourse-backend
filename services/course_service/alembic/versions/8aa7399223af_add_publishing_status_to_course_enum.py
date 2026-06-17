@@ -20,20 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ALTER TYPE ADD VALUE cannot run inside a transaction in PostgreSQL.
-    # Switch to AUTOCOMMIT for this statement only.
-    connection = op.get_bind()
-    connection.execution_options(isolation_level="AUTOCOMMIT").execute(
+    # Manually commit the open transaction first, then run the DDL.
+    op.execute(sa.text("COMMIT"))
+    op.execute(
         sa.text("ALTER TYPE course_status_enum ADD VALUE IF NOT EXISTS 'publishing' BEFORE 'published'")
     )
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    connection.execution_options(isolation_level="AUTOCOMMIT").execute(
-        sa.text("""
-            ALTER TABLE courses ALTER COLUMN status TYPE VARCHAR(20);
-            DROP TYPE course_status_enum;
-            CREATE TYPE course_status_enum AS ENUM ('draft', 'published', 'archived');
-            ALTER TABLE courses ALTER COLUMN status TYPE course_status_enum USING status::course_status_enum;
-        """)
-    )
+    op.execute(sa.text("COMMIT"))
+    op.execute(sa.text("""
+        ALTER TABLE courses ALTER COLUMN status TYPE VARCHAR(20);
+        DROP TYPE course_status_enum;
+        CREATE TYPE course_status_enum AS ENUM ('draft', 'published', 'archived');
+        ALTER TABLE courses ALTER COLUMN status TYPE course_status_enum USING status::course_status_enum;
+    """))

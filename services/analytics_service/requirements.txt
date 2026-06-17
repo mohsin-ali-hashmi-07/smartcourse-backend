@@ -1,5 +1,9 @@
 aiokafka==0.13.0
 prometheus-fastapi-instrumentator==7.1.0
+sqlalchemy==2.0.41
+asyncpg==0.30.0
+alembic==1.16.1
+psycopg2-binary==2.9.10
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0

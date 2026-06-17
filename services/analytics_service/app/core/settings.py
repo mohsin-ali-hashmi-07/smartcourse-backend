@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "analytics-service"
     debug: bool = True
+    database_url: str
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_consumer_group: str = "analytics-group"
 
