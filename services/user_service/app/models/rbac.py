@@ -1,21 +1,37 @@
-import uuid
-from sqlalchemy import String, ForeignKey, JSON, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
+class Role(Base):
+    """
+    Lookup table — one row per role definition.
+    Seeded at migration time: admin, instructor, student.
+    """
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+
+    user_roles: Mapped[list["UserRole"]] = relationship("UserRole", back_populates="role_ref")
+
+
 class UserRole(Base):
+    """
+    Join table — many-to-many between users and roles.
+    Composite PK (user_id, role_id) — no surrogate id needed.
+    """
     __tablename__ = "user_roles"
 
     __table_args__ = (
-        UniqueConstraint("user_id", "role", name="uq_user_role"),
+        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
     user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    role: Mapped[str] = mapped_column(String(50), nullable=False)
-    permissions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    role_id: Mapped[int] = mapped_column(
+        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    role_ref: Mapped["Role"] = relationship("Role", back_populates="user_roles")

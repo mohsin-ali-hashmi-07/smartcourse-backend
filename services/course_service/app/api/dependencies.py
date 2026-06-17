@@ -35,7 +35,7 @@ def get_temporal_client(request: Request) -> TemporalClient:
 def require_instructor(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if current_user.role not in ("instructor", "admin"):
+    if not any(r in current_user.roles for r in ("instructor", "admin")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only instructors can perform this action",
@@ -45,7 +45,7 @@ def require_instructor(
 def require_admin(
     current_user: TokenData = Depends(get_current_user),
 ) -> TokenData:
-    if current_user.role != "admin":
+    if "admin" not in current_user.roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="only admins can perform this action",

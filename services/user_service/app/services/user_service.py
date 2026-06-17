@@ -39,28 +39,21 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
     )
     user = await user_repository.create_user(db, user)
 
-    await rbac_repository.replace_role(
-        db,
-        user.id,
-        data.role,
-        PERMISSIONS_MAP.get(data.role, []),
-    )
-    user.role = data.role  # transient attr for response serialization
+    await rbac_repository.replace_role(db, user.id, data.role)
+    user.roles = [data.role]
     return user
 
 async def get_user(db: AsyncSession, user_id: str) -> User:
     user = await user_repository.get_user_by_id(db, user_id)
     if not user:
         raise ValueError(f"user not found: {user_id}")
-    roles = await rbac_repository.get_user_roles(db, user_id)
-    user.role = roles[0].role if roles else "student"
+    user.roles = await rbac_repository.get_user_roles(db, user_id)
     return user
 
 async def list_users(db: AsyncSession) -> list[User]:
     users = await user_repository.get_all_users(db)
     for u in users:
-        roles = await rbac_repository.get_user_roles(db, u.id)
-        u.role = roles[0].role if roles else "student"
+        u.roles = await rbac_repository.get_user_roles(db, u.id)
     return users
 
 
@@ -72,9 +65,21 @@ async def assign_role(db: AsyncSession, user_id: str, role: str) -> User:
     if not user:
         raise ValueError(f"user not found: {user_id}")
 
-    await rbac_repository.replace_role(db, user_id, role, PERMISSIONS_MAP.get(role, []))
+    await rbac_repository.add_role(db, user_id, role)
+    user.roles = await rbac_repository.get_user_roles(db, user_id)
+    return user
 
-    user.role = role  # transient attr for response serialization
+
+async def revoke_role(db: AsyncSession, user_id: str, role: str) -> User:
+    if role not in USER_ROLES:
+        raise ValueError(f"invalid role: {role}. Must be one of {USER_ROLES}")
+
+    user = await user_repository.get_user_by_id(db, user_id)
+    if not user:
+        raise ValueError(f"user not found: {user_id}")
+
+    await rbac_repository.remove_role(db, user_id, role)
+    user.roles = await rbac_repository.get_user_roles(db, user_id)
     return user
 
 async def deactivate_user(db: AsyncSession, user_id: str) -> User:
@@ -83,16 +88,15 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> User:
         raise ValueError(f"user not found: {user_id}")
 
     user = await user_repository.deactivate_user(db, user)
-    roles = await rbac_repository.get_user_roles(db, user_id)
-    user.role = roles[0].role if roles else "student"
+    user.roles = await rbac_repository.get_user_roles(db, user_id)
     return user
 
 
-def _create_access_token(user_id: str, role: str) -> str:
+def _create_access_token(user_id: str, roles: list[str]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {
         "sub": user_id,
-        "role": role,
+        "roles": roles,
         "exp": expire,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
@@ -104,15 +108,14 @@ async def login(db: AsyncSession, email: str, password: str) -> dict:
     if not user.is_active:
         raise ValueError("account is deactivated")
 
-    user_roles = await rbac_repository.get_user_roles(db, user.id)
-    if not user_roles:
+    roles = await rbac_repository.get_user_roles(db, user.id)
+    if not roles:
         raise ValueError("user has no assigned role")
-    role = user_roles[0].role
 
-    token = _create_access_token(user.id, role)
+    token = _create_access_token(user.id, roles)
     return {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "role": role,
+        "roles": roles,
     }

@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client as TemporalClient
+from temporalio.service import RPCError
 
-from app.api.dependencies import get_db, get_current_user, require_instructor
+from app.api.dependencies import get_db, get_current_user, require_instructor, get_temporal_client
 from app.schemas.course import (
     CourseCreate, CourseUpdate, CourseResponse,
     ModuleCreate, ModuleUpdate, ModuleResponse,

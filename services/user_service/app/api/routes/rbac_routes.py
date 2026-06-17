@@ -24,6 +24,20 @@ async def assign_role(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.delete("/users/{user_id}/role", response_model=UserResponse)
+async def revoke_role(
+    user_id: str,
+    data: UserRoleUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(require_admin),
+):
+    try:
+        user = await user_service.revoke_role(db, user_id, data.role)
+        return UserResponse.model_validate(user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.get("/users/{user_id}/roles")
 async def get_user_roles(
     user_id: str,
@@ -31,4 +45,4 @@ async def get_user_roles(
     current_user: TokenData = Depends(require_admin),
 ):
     roles = await rbac_repository.get_user_roles(db, user_id)
-    return [{"role": r.role, "permissions": r.permissions} for r in roles]
+    return {"user_id": user_id, "roles": roles}
