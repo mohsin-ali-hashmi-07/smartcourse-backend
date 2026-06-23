@@ -29,6 +29,13 @@ class CourseEnrollRequest(BaseModel):
 class ProgressCreate(BaseModel):
     total_modules: int
 
+
+class AtomicEnrollRequest(BaseModel):
+    """Internal — used by orchestrator for the single atomic enroll+progress endpoint."""
+    student_id: str
+    course_id: str
+    total_modules: int
+
 class EnrollmentUpdate(BaseModel):
     status: str | None = None
 

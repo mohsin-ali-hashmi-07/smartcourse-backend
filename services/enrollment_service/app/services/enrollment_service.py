@@ -28,6 +28,36 @@ async def enroll_student(db: AsyncSession, data: EnrollmentCreate) -> Enrollment
     return await enrollment_repository.create_enrollment(db, enrollment)
 
 
+async def enroll_student_atomic(
+    db: AsyncSession, student_id: str, course_id: str, total_modules: int
+) -> Enrollment:
+    """
+    Atomically creates Enrollment + Progress in a single DB transaction.
+    Idempotent: if the (student_id, course_id) pair already exists, returns
+    the existing record without re-inserting anything.
+    """
+    existing = await enrollment_repository.get_enrollment_by_student_and_course(
+        db, student_id, course_id
+    )
+    if existing:
+        return existing
+
+    enrollment_id = str(uuid.uuid4())
+    enrollment = Enrollment(
+        id=enrollment_id,
+        student_id=student_id,
+        course_id=course_id,
+        status="active",
+    )
+    progress = Progress(
+        id=str(uuid.uuid4()),
+        enrollment_id=enrollment_id,
+        completed_modules=0,
+        total_modules=total_modules,
+    )
+    return await enrollment_repository.create_enrollment_with_progress(db, enrollment, progress)
+
+
 async def init_progress(
     db: AsyncSession, enrollment_id: str, total_modules: int
 ) -> Progress:

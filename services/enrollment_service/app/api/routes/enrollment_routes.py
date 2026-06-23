@@ -4,7 +4,8 @@ from temporalio.client import Client as TemporalClient
 
 from app.api.dependencies import get_db, get_current_user, require_student, require_admin
 from app.schemas.enrollment import (
-    EnrollmentCreate, CourseEnrollRequest, ProgressCreate, EnrollmentResponse, ProgressResponse
+    EnrollmentCreate, CourseEnrollRequest, AtomicEnrollRequest,
+    ProgressCreate, EnrollmentResponse, ProgressResponse
 )
 from shared.utils.auth import TokenData
 from app.services import enrollment_service
@@ -50,6 +51,25 @@ async def internal_create_enrollment(
     """Internal — called by enrollment_orchestrator to create the DB record."""
     try:
         enrollment = await enrollment_service.enroll_student(db, data)
+        return EnrollmentResponse.model_validate(enrollment)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/internal/enroll", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def internal_enroll_atomic(
+    data: AtomicEnrollRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Internal — called by enrollment_orchestrator.
+    Creates Enrollment + Progress atomically in one DB transaction.
+    Idempotent: safe for Temporal retries.
+    """
+    try:
+        enrollment = await enrollment_service.enroll_student_atomic(
+            db, data.student_id, data.course_id, data.total_modules
+        )
         return EnrollmentResponse.model_validate(enrollment)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

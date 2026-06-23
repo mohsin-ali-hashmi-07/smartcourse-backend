@@ -5,9 +5,7 @@ from app.core.settings import settings
 from app.workflows.enrollment_workflow import EnrollmentWorkflow
 from app.activities.enrollment_activities import (
     verify_course_published,
-    create_enrollment,
-    create_progress,
-    delete_enrollment,
+    create_enrollment_with_progress,
     emit_enrollment_created_event,
 )
 
@@ -21,9 +19,7 @@ async def main():
         workflows=[EnrollmentWorkflow],
         activities=[
             verify_course_published,
-            create_enrollment,
-            create_progress,
-            delete_enrollment,
+            create_enrollment_with_progress,
             emit_enrollment_created_event,
         ],
     )

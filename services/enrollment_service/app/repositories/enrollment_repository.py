@@ -56,6 +56,23 @@ async def create_enrollment(
     return enrollment
 
 
+async def create_enrollment_with_progress(
+    db: AsyncSession, enrollment: Enrollment, progress: Progress
+) -> Enrollment:
+    """
+    Atomically insert both Enrollment and Progress in the same flush.
+    The caller's session/transaction wraps both — if either fails the
+    session-level rollback in get_db undoes both writes.
+    """
+    db.add(enrollment)
+    db.add(progress)
+    await db.flush()
+    await db.refresh(enrollment)
+    await db.refresh(progress)
+    enrollment.progress = progress
+    return enrollment
+
+
 async def update_enrollment(
     db: AsyncSession, enrollment: Enrollment, updates: dict
 ) -> Enrollment:
