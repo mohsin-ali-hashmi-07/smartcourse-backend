@@ -1,8 +1,11 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client as TemporalClient
 from temporalio.service import RPCError
+import uuid
 
 from app.api.dependencies import get_db, get_current_user, require_instructor, get_temporal_client
 from app.schemas.course import (
@@ -74,16 +77,27 @@ async def publish_course(
     current_user: TokenData = Depends(require_instructor),
     temporal_client: TemporalClient = Depends(get_temporal_client),
 ):
-    workflow_id = f"publish-course-{course_id}"
     try:
-        # 1. Start workflow FIRST — before touching DB status
+        course = await course_service.get_course(db, course_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    course_status = course.get("status") if isinstance(course, dict) else course.status
+    if course_status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="course is already published",
+        )
+
+    workflow_id = f"publish-course-{course_id}-{uuid.uuid4()}"
+    try:
         handle = await temporal_client.start_workflow(
             "CoursePublishWorkflow",
             args=[course_id],
             id=workflow_id,
-            task_queue="course-task-queue",
+            task_queue=settings.temporal_task_queue,
+            execution_timeout=timedelta(seconds=settings.temporal_workflow_timeout),
         )
-        # 2. Only update status once workflow is safely started
         from app.schemas.course import CourseUpdate
         await course_service.update_course(db, course_id, CourseUpdate(status="publishing"))
         return {
@@ -92,11 +106,6 @@ async def publish_course(
             "message": "course publish workflow initiated",
         }
     except RPCError as e:
-        if "already started" in str(e).lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="a publish workflow is already running for this course",
-            )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

@@ -16,7 +16,7 @@ async def verify_course_published(course_id: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.course_service_url}/api/v1/courses/{course_id}",
-            timeout=10.0,
+            timeout=settings.temporal_http_timeout,
         )
 
     if response.status_code == 404:
@@ -52,7 +52,7 @@ async def create_enrollment_with_progress(
                 "course_id": course_id,
                 "total_modules": total_modules,
             },
-            timeout=10.0,
+            timeout=settings.temporal_http_timeout,
         )
 
     if response.status_code in (200, 201):

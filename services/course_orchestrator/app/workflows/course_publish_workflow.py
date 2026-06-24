@@ -9,6 +9,7 @@ with workflow.unsafe.imports_passed_through():
         revert_course_to_draft,
         emit_course_published_event,
     )
+    from app.core.settings import settings
 
 
 @workflow.defn
@@ -33,17 +34,21 @@ class CoursePublishWorkflow:
     @workflow.run
     async def run(self, course_id: str) -> dict:
         retry_policy = RetryPolicy(
-            maximum_attempts=3,
-            initial_interval=timedelta(seconds=2),
+            maximum_attempts=settings.temporal_max_retries,
+            initial_interval=timedelta(seconds=settings.temporal_initial_retry_interval),
+            maximum_interval=timedelta(seconds=settings.temporal_max_retry_interval),
         )
-        compensation_retry = RetryPolicy(maximum_attempts=5)
+        compensation_retry = RetryPolicy(
+            maximum_attempts=settings.temporal_compensation_max_retries
+        )
+        activity_timeout = timedelta(seconds=settings.temporal_activity_timeout)
 
         try:
             # Step 1: Validate
             course = await workflow.execute_activity(
                 validate_course,
                 course_id,
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=activity_timeout,
                 retry_policy=retry_policy,
             )
 
@@ -51,7 +56,7 @@ class CoursePublishWorkflow:
             updated_course = await workflow.execute_activity(
                 publish_course,
                 course_id,
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=activity_timeout,
                 retry_policy=retry_policy,
             )
 
@@ -63,7 +68,7 @@ class CoursePublishWorkflow:
                     updated_course["title"],
                     updated_course["instructor_id"],
                 ],
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=activity_timeout,
                 retry_policy=retry_policy,
             )
 
@@ -75,7 +80,7 @@ class CoursePublishWorkflow:
             await workflow.execute_activity(
                 revert_course_to_draft,
                 course_id,
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=activity_timeout,
                 retry_policy=compensation_retry,
             )
             raise  # bubble up so Temporal marks workflow as failed

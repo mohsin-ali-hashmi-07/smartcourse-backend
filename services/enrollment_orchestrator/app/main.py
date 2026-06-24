@@ -15,7 +15,7 @@ async def main():
 
     worker = Worker(
         client,
-        task_queue="enrollment-task-queue",
+        task_queue=settings.temporal_task_queue,
         workflows=[EnrollmentWorkflow],
         activities=[
             verify_course_published,

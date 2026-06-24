@@ -1,6 +1,10 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client as TemporalClient
+from temporalio.service import RPCError
+import uuid
 
 from app.api.dependencies import get_db, get_current_user, require_student, require_admin
 from app.schemas.enrollment import (
@@ -16,27 +20,44 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 @router.post("/", status_code=status.HTTP_202_ACCEPTED)
 async def enroll_student(
     data: CourseEnrollRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(require_student),
 ):
     """
     Start enrollment via Temporal workflow.
-    student_id is taken from the JWT — clients cannot enroll on behalf of others.
+    DB is the source of truth for idempotency — if an active/completed enrollment
+    already exists the workflow is not started and the existing record is returned.
+    A unique workflow ID is generated per attempt so a cancelled/terminated
+    workflow can always be retried without hitting Temporal ID conflicts.
     """
+    student_id = current_user.user_id
+
+    existing = await enrollment_service.get_existing_enrollment(db, student_id, data.course_id)
+    if existing:
+        return {
+            "workflow_id": None,
+            "status": existing.status,
+            "message": "already enrolled",
+            "enrollment_id": existing.id,
+        }
+
     try:
         client = await TemporalClient.connect(settings.temporal_host)
-        student_id = current_user.user_id
-        workflow_id = f"enrollment-{student_id}-{data.course_id}"
+        workflow_id = f"enrollment-{student_id}-{data.course_id}-{uuid.uuid4()}"
         handle = await client.start_workflow(
             "EnrollmentWorkflow",
             args=[student_id, data.course_id],
             id=workflow_id,
-            task_queue="enrollment-task-queue",
+            task_queue=settings.temporal_task_queue,
+            execution_timeout=timedelta(seconds=settings.temporal_workflow_timeout),
         )
         return {
             "workflow_id": handle.id,
             "status": "started",
             "message": "enrollment workflow initiated",
         }
+    except RPCError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

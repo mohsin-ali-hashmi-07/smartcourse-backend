@@ -12,7 +12,7 @@ async def validate_course(course_id: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.course_service_url}/api/v1/courses/{course_id}",
-            timeout=10.0,
+            timeout=settings.temporal_http_timeout,
         )
     if response.status_code == 404:
         # Course doesn't exist — retrying won't help
@@ -39,7 +39,7 @@ async def publish_course(course_id: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.patch(
             f"{settings.course_service_url}/api/v1/courses/internal/{course_id}/publish",
-            timeout=10.0,
+            timeout=settings.temporal_http_timeout,
         )
     if response.status_code != 200:
         raise RuntimeError(
@@ -54,7 +54,7 @@ async def revert_course_to_draft(course_id: str) -> None:
     async with httpx.AsyncClient() as client:
         response = await client.patch(
             f"{settings.course_service_url}/api/v1/courses/internal/{course_id}/revert-to-draft",
-            timeout=10.0,
+            timeout=settings.temporal_http_timeout,
         )
     if response.status_code != 200:
         raise RuntimeError(

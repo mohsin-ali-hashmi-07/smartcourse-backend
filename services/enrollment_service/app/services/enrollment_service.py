@@ -93,6 +93,14 @@ async def hard_delete_enrollment(db: AsyncSession, enrollment_id: str) -> None:
         return  # already gone — idempotent
     await enrollment_repository.delete_enrollment(db, enrollment)
 
+async def get_existing_enrollment(
+    db: AsyncSession, student_id: str, course_id: str
+) -> Enrollment | None:
+    return await enrollment_repository.get_enrollment_by_student_and_course(
+        db, student_id, course_id
+    )
+
+
 async def get_enrollment(db: AsyncSession, enrollment_id: str) -> Enrollment:
     enrollment = await enrollment_repository.get_enrollment_by_id(db, enrollment_id)
     if not enrollment:

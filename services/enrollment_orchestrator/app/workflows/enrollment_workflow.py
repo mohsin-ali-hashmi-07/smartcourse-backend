@@ -8,6 +8,7 @@ with workflow.unsafe.imports_passed_through():
         create_enrollment_with_progress,
         emit_enrollment_created_event,
     )
+    from app.core.settings import settings
 
 
 @workflow.defn
@@ -28,15 +29,17 @@ class EnrollmentWorkflow:
     @workflow.run
     async def run(self, student_id: str, course_id: str) -> dict:
         retry_policy = RetryPolicy(
-            maximum_attempts=3,
-            initial_interval=timedelta(seconds=2),
+            maximum_attempts=settings.temporal_max_retries,
+            initial_interval=timedelta(seconds=settings.temporal_initial_retry_interval),
+            maximum_interval=timedelta(seconds=settings.temporal_max_retry_interval),
         )
+        activity_timeout = timedelta(seconds=settings.temporal_activity_timeout)
 
         # ── Step 1: Verify course is published ────────────────────────────────
         course = await workflow.execute_activity(
             verify_course_published,
             course_id,
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=activity_timeout,
             retry_policy=retry_policy,
         )
 
@@ -46,7 +49,7 @@ class EnrollmentWorkflow:
         enrollment = await workflow.execute_activity(
             create_enrollment_with_progress,
             args=[student_id, course_id, total_modules],
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=activity_timeout,
             retry_policy=retry_policy,
         )
 
@@ -54,7 +57,7 @@ class EnrollmentWorkflow:
         await workflow.execute_activity(
             emit_enrollment_created_event,
             args=[enrollment["id"], student_id, course_id],
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=activity_timeout,
             retry_policy=retry_policy,
         )
 
